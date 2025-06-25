@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <iostream>
 
-#define M 32
-#define K 65
-#define N 65
+#define M 64
+#define K 64
+#define N 64
 
 #define BLOCK_SIZE_X 32
 #define BLOCK_SIZE_Y 32

@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <iostream>
 
-#define M 32
-#define K 32
-#define N 32
+#define M 64
+#define K 64
+#define N 64
 
 #define BLOCK_SIZE_X 32
 #define BLOCK_SIZE_Y 32
@@ -16,24 +16,29 @@ __global__ void GEMM(float *matrixA, float *matrixB, float *matrixC)
     const unsigned int tidx = threadIdx.x + blockDim.x*blockIdx.x;
     const unsigned int tidy = threadIdx.y + blockDim.y*blockIdx.y;
 
-    __shared__ float sDataA[BLOCK_SIZE_Y][K];
-    __shared__ float sDataB[K][BLOCK_SIZE_X];
+    float *A_start = matrixA + blockIdx.y*blockDim.y*K;
+    float *B_start = matrixB + blockIdx.x*blockDim.x;
+    __shared__ float sDataA[BLOCK_SIZE_Y][BLOCK_SIZE_X];
+    __shared__ float sDataB[BLOCK_SIZE_Y][BLOCK_SIZE_X];
 
     if(tidy < M && tidx < N)
     {
+        float temp = 0;
         for(int s = 0; s < K; s += blockDim.y)
         {
-            sDataA[threadIdx.y][threadIdx.x + s] = matrixA[tidy*K + threadIdx.x + s];
-            sDataB[threadIdx.y + s][threadIdx.x] = matrixB[(threadIdx.y + s)*N + tidx];
+            sDataA[threadIdx.y][threadIdx.x] = A_start[threadIdx.y * K + s + threadIdx.x];
+            sDataB[threadIdx.y][threadIdx.x] = B_start[(threadIdx.y + s)*N + threadIdx.x];
+
+            __syncthreads();
+
+            for(int i = 0; i < BLOCK_SIZE_X; i++)
+            {
+                temp += sDataA[threadIdx.y][i]*sDataB[i][threadIdx.x];
+            }
+
+            __syncthreads();
         }
         
-        __syncthreads();
-
-        float temp = 0;
-        for(int k = 0; k < K; k++)
-        {
-            temp += sDataA[threadIdx.y][k]*sDataB[k][threadIdx.x];
-        }
         matrixC[tidy*N + tidx] = temp;
     }
 }
