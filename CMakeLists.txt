@@ -4,3 +4,6 @@ project(ReduceProject CXX CUDA)
 
 add_subdirectory(Reduce)
 add_subdirectory(Gemm)
+add_subdirectory(Mha)
+
+add_subdirectory(SoftMax)
