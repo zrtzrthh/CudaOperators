@@ -4,7 +4,7 @@
 #include <iostream>
 
 #define N 10 * 64
-#define THREAD_PER_BLOCK 63
+#define THREAD_PER_BLOCK 64
 #define WARPSIZE 32
 
 __global__ void reduceNomal(float *d_input, float *d_output)

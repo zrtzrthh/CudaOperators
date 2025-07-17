@@ -5,33 +5,49 @@
 
 #define N 32 * 1024 * 1024
 #define THREAD_PER_BLOCK 256
+#define WARPSIZE 32
 
-// 2dims-tensor SoftMax
-// 一个block blockDim.x = Rows，即每个线程做一行softmax
-template <int Rows, int Cols>
-__global__ void softmaxOnline(float *input, float *output)
+// gridDim: Rows
+// blockDim: blockDim.x, 最好是32的倍数（WARPSIZE）
+
+// 一个block完成一次点积
+// input: A: M x N, b: N
+// output: c : N
+__global__ void gemvNormal(float *A, float *b, float *c, int M, int N)
 {
-    unsigned int tidx = threadIdx.x + blockDim.x * blockIdx.x;
-    if (tidx < Rows)
+    uint tid = threadIdx.x;
+    uint warpID = tid/WARPSIZE;
+    uint laneID = tid%WARPSIZE;
+    unit warpSum = blockDim.x / WARPSIZE;
+
+    float val = 0.f;
+    if(blockDim.x < N)
     {
-        float *input_start = input + tidx * Cols;
-        float *output_start = output + tidx * Cols;
+      for(int i = tid; i < N; i += blockDim.x)
+      {
+        val += A[tid * N + i] * b[i]
+      }
+    }
 
-        float cur_max_val = input_start[0];
-        float pre_max_val = -1e20f;
-        float sum_val = 1.f;
-        for (int i = 1; i < Cols; i++)
-        {
-            pre_max_val = cur_max_val;
-            float cur_num = input_start[i];
-            cur_max_val = max(cur_max_val, cur_num);
-            sum_val = sum_val*expf(pre_max_val - cur_max_val) + expf(cur_num - cur_max_val);
-        }
+    __shared__ float sum_smem[32];
 
-        for (int i = 0; i < Cols; i++)
-        {
-            output_start[i] = expf(input_start[i] - cur_max_val)/sum_val;
-        }
+    for(int i = WARPSIZE >> 2; i > 0; i >>= 1)
+    {
+      val += __shfl_down_sync(0xffffffff, val, i);
+    }
+
+    if(laneID == 0) sum_smem[warpID] = val;
+
+    __syncthreads();
+    
+    if(warpID == 0)
+    {
+      float val = laneID < warpSum ? sum_smem[laneID] : 0.f;
+      for(int i = WARPSIZE >> 2; i > 0; i >>= 1)
+      {
+        val += __shfl_down_sync(0xffffffff, val, i);
+      }
+      if(laneID == 0) c[0] = val;
     }
 }
 
@@ -93,8 +109,8 @@ void printResult(float *gpu_result)
 
 int main()
 {
-    constexpr int Rows = 4;
-    constexpr int Cols = 4;
+    constexpr int Rows = 256;
+    constexpr int Cols = 256;
     // cpu alloc
     float *input = (float *)malloc(Rows * Cols * sizeof(float));
     float *gpu_result = (float *)malloc(Rows * Cols * sizeof(float));
@@ -121,14 +137,14 @@ int main()
 
     dim3 Grid(1, 1);
     dim3 Block(Rows, 1);
-    softmaxOnline<Rows, Cols><<<Grid, Block>>>(d_input, d_output);
+    softmaxNomal<<<Grid, Block>>>(d_input, d_output, Rows, Cols);
 
     cudaMemcpy(gpu_result, d_output, Rows * Cols * sizeof(float), cudaMemcpyDeviceToHost);
 
     if (checkResult<Rows, Cols>(cpu_result, gpu_result))
     {
         printf("Result is correct!\n");
-        printResult<Rows, Cols>(gpu_result);
+        // printResult<Rows, Cols>(gpu_result);
     }
     else
         printf("Result is incorret!\n");

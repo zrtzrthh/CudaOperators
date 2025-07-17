@@ -6,33 +6,12 @@
 #define N 32 * 1024 * 1024
 #define THREAD_PER_BLOCK 256
 
-// 2dims-tensor SoftMax
-// 一个block blockDim.x = Rows，即每个线程做一行softmax
+// ROWS个block，一个block做一行的max，sum，以及softmmax
+// 2dims-tensor SoftMax，3—loop 
 template <int Rows, int Cols>
-__global__ void softmaxOnline(float *input, float *output)
+__global__ void softmaxNomal(float *input, float *output)
 {
-    unsigned int tidx = threadIdx.x + blockDim.x * blockIdx.x;
-    if (tidx < Rows)
-    {
-        float *input_start = input + tidx * Cols;
-        float *output_start = output + tidx * Cols;
-
-        float cur_max_val = input_start[0];
-        float pre_max_val = -1e20f;
-        float sum_val = 1.f;
-        for (int i = 1; i < Cols; i++)
-        {
-            pre_max_val = cur_max_val;
-            float cur_num = input_start[i];
-            cur_max_val = max(cur_max_val, cur_num);
-            sum_val = sum_val*expf(pre_max_val - cur_max_val) + expf(cur_num - cur_max_val);
-        }
-
-        for (int i = 0; i < Cols; i++)
-        {
-            output_start[i] = expf(input_start[i] - cur_max_val)/sum_val;
-        }
-    }
+    
 }
 
 template <int Rows, int Cols>
@@ -93,8 +72,8 @@ void printResult(float *gpu_result)
 
 int main()
 {
-    constexpr int Rows = 4;
-    constexpr int Cols = 4;
+    constexpr int Rows = 256;
+    constexpr int Cols = 256;
     // cpu alloc
     float *input = (float *)malloc(Rows * Cols * sizeof(float));
     float *gpu_result = (float *)malloc(Rows * Cols * sizeof(float));
@@ -121,14 +100,14 @@ int main()
 
     dim3 Grid(1, 1);
     dim3 Block(Rows, 1);
-    softmaxOnline<Rows, Cols><<<Grid, Block>>>(d_input, d_output);
+    softmaxNomal<Rows, Cols><<<Grid, Block>>>(d_input, d_output);
 
     cudaMemcpy(gpu_result, d_output, Rows * Cols * sizeof(float), cudaMemcpyDeviceToHost);
 
     if (checkResult<Rows, Cols>(cpu_result, gpu_result))
     {
         printf("Result is correct!\n");
-        printResult<Rows, Cols>(gpu_result);
+        // printResult<Rows, Cols>(gpu_result);
     }
     else
         printf("Result is incorret!\n");
