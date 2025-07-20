@@ -21,12 +21,9 @@ __global__ void gemvNormal(float *A, float *b, float *c, int M, int N)
     unit warpSum = blockDim.x / WARPSIZE;
 
     float val = 0.f;
-    if(blockDim.x < N)
+    for(int i = tid; i < N; i += blockDim.x)
     {
-      for(int i = tid; i < N; i += blockDim.x)
-      {
-        val += A[tid * N + i] * b[i]
-      }
+        val += A[blockIdx.x * N + i] * b[i]
     }
 
     __shared__ float sum_smem[32];

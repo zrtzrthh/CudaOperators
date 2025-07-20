@@ -7,11 +7,35 @@
 #define THREAD_PER_BLOCK 256
 
 // ROWS个block，一个block做一行的max，sum，以及softmmax
-// 2dims-tensor SoftMax，3—loop 
+// 2dims-tensor SoftMax，3—loop
 template <int Rows, int Cols>
 __global__ void softmaxNomal(float *input, float *output)
 {
-    
+    uint tid = threadIdx.x;
+    uint warpID = tid / WARPSIZE;
+    uint laneID = tid % WARPSIZE;
+    unit warpSum = blockDim.x / WARPSIZE;
+
+    float vmax = -INFINITY;
+    for (int i = tid; i < N; i += blockDim.x)
+    {
+        val = max(val, input[blockIdx.x * N + i]);
+    }
+    vmax = BlockAllReduce<float, MaxOp>(val);
+    __syncthreads();
+
+    float exp_sum = 1e-10;
+    for (int i = tid; i < N; i += blockDim.x)
+    {
+        exp_sum += __expf((inptu[blockIdx.x * N + i] - vmax) * softmax_scale);
+    }
+    exp_sum = BlockAllReduce<float, SumOp>(exp_sum);
+    __syncthreads();
+
+    for (int i = tid; i < N; i += blockDim.x)
+    {
+        output[blockIdx.x * N + i] = __expf((inptu[blockIdx.x * N + i] - vmax) * softmax_scale)/exp_sum;
+    }
 }
 
 template <int Rows, int Cols>
